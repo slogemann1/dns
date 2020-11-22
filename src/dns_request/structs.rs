@@ -124,12 +124,16 @@ impl DnsResponse {
         self
     }
 
-    pub fn build(&self) -> Vec<u8> {
+    pub fn build(&self, tcp: bool) -> Vec<u8> {
         let mut result: Vec<u8> = Vec::new();
 
         result.append(&mut self.header.build().clone());
         for answer in &self.answers {
             result.append(&mut answer.build().clone());
+        }
+
+        if !tcp {
+            return result;
         }
 
         let mut len_result = (result.len() as u16).to_be_bytes().to_vec();
@@ -441,6 +445,6 @@ mod tests {
             192, 168, 0, 1 //rdata
         );
 
-        assert_eq!(resp.build(), expected);
+        assert_eq!(resp.build(true), expected);
     }
 }

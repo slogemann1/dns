@@ -7,9 +7,13 @@ use std::convert::TryInto;
 mod structs;
 pub use structs::*;
 
-pub fn parse_query(buffer: &Vec<u8>) -> Option<DnsQuery> {
-    let buffer = buffer[2..].to_vec(); //Ignore Length bits
-    let buffer = &buffer;
+pub fn parse_query(buffer: &Vec<u8>, tcp: bool) -> Option<DnsQuery> {
+    let mut buffer = buffer;
+    let buffer_temp;
+    if tcp {
+        buffer_temp = buffer[2..].to_vec(); //Ignore Length bits
+        buffer = &buffer_temp;
+    }
 
     let (header, mut buffer) = match parse_header(&buffer) {
         Some(val) => val,
@@ -258,7 +262,7 @@ mod tests {
             header: expected_header,
             questions: vec!(expected_q1, expected_q2)
         };
-        let result = parse_query(&query).unwrap();
+        let result = parse_query(&query, true).unwrap();
 
         assert_eq!(result, expected);
     }
@@ -289,6 +293,6 @@ mod tests {
             0, 0b0000_0100 //qclass (4)
         );
 
-        assert_eq!(parse_query(&query), None);
+        assert_eq!(parse_query(&query, true), None);
     }
 }
