@@ -1,6 +1,7 @@
 //info from:
 //https://www2.cs.duke.edu/courses/fall16/compsci356/DNS/DNS-primer.pdf
 //https://www.hostdime.com/kb/hd/domain/dns-documentation
+//https://tools.ietf.org/html/rfc1035
 
 use std::convert::TryInto; 
 

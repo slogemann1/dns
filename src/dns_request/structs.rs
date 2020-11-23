@@ -10,7 +10,10 @@ pub struct DnsQuery {
 #[derive(Debug)]
 pub struct DnsResponse {
     pub header: DnsHeader,
-    pub answers: Vec<DnsAnswer>
+    pub questions: Vec<DnsQuestion>,
+    pub answers: Vec<DnsAnswer>,
+    pub authority_records: Vec<DnsAnswer>,
+    pub additional_records: Vec<DnsAnswer>
 }
 
 #[derive(PartialEq, Debug)]
@@ -30,7 +33,7 @@ pub struct DnsHeader {
     pub ar_count: u16 //Additional Resource Records Count
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct DnsQuestion {
     pub qname: Vec<String>, //List of domains to be determined
     pub qtype: DnsRecordType, //Query Type
@@ -39,12 +42,23 @@ pub struct DnsQuestion {
 
 #[derive(Clone, Debug)]
 pub struct DnsAnswer {
-    pub name: Vec<String>, //Like DnsQuest.qname
+    pub name: Vec<String>, //Like DnsRequest.qname
     pub r#type: DnsRecordType, //Type of rdata
     pub class: u16, //Class of rdata
     pub ttl: u32, //Number of seconds results can be cached
     pub rd_length: u16, //Length of rdata
     pub rdata: Vec<u8> //Data of response (currently ip format)
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct DnsAuthRecord {
+    pub mname: Vec<String>,
+    pub rname: Vec<String>,
+    pub serial: u32,
+    pub refresh: u32,
+    pub retry: u32,
+    pub expire: u32,
+    pub minimum: u32
 }
 
 #[derive(PartialEq, Debug)]
@@ -66,7 +80,9 @@ pub enum DnsRecordType {
     LOC(Option<Vec<u8>>), //29
     RP(Option<Vec<u8>>), //17
     TLSA(Option<Vec<u8>>), //52
-    NotImplemented
+    PTR(Option<Vec<u8>>), //12
+    SOA(Option<DnsAuthRecord>), //6
+    NotImplemented(u8),
 }
 
 impl DnsResponse {
@@ -89,12 +105,20 @@ impl DnsResponse {
 
         DnsResponse {
             header: header,
-            answers: Vec::new()
+            questions: Vec::new(),
+            answers: Vec::new(),
+            authority_records: Vec::new(),
+            additional_records: Vec::new()
         }
     }
 
     pub fn id(mut self, id: u16) -> Self {
         self.header.id = id;
+        self
+    }
+
+    pub fn rd(mut self, rd: bool) -> Self {
+        self.header.rd = rd;
         self
     }
 
@@ -118,9 +142,21 @@ impl DnsResponse {
         self
     }
 
-    pub fn answer(mut self, answer: &DnsAnswer) -> Self {
-        self.answers.push(answer.clone());
+    pub fn add_answer(mut self, answer: DnsAnswer) -> Self {
+        self.answers.push(answer);
         self.header.an_count += 1;
+        self
+    }
+
+    pub fn add_question(mut self, question: DnsQuestion) -> Self {
+        self.questions.push(question);
+        self.header.qd_count += 1;
+        self
+    }
+
+    pub fn add_auth_record(mut self, auth_record: DnsAnswer) -> Self {
+        self.authority_records.push(auth_record);
+        self.header.ns_count += 1;
         self
     }
 
@@ -128,8 +164,18 @@ impl DnsResponse {
         let mut result: Vec<u8> = Vec::new();
 
         result.append(&mut self.header.build().clone());
+
+        for question in &self.questions {
+            result.append(&mut question.build().clone());
+        }
         for answer in &self.answers {
             result.append(&mut answer.build().clone());
+        }
+        for auth_record in &self.authority_records {
+            result.append(&mut auth_record.build().clone());
+        }
+        for add_record in &self.additional_records {
+            result.append(&mut add_record.build().clone());
         }
 
         if !tcp {
@@ -222,9 +268,9 @@ impl DnsAnswer {
             Some(val) => val,
             None => return self
         };
+        self.r#type = r_type;
 
-        let (_, rdata) = r_type.to_byte();
-        
+        let (_, rdata) = self.r#type.to_byte();
         if let Some(val) = rdata {
             self.rd_length = val.len() as u16;
             self.rdata = val; 
@@ -242,6 +288,76 @@ impl DnsAnswer {
         result.append(&mut self.ttl.to_be_bytes().to_vec());
         result.append(&mut self.rd_length.to_be_bytes().to_vec());
         result.append(&mut self.rdata.clone());
+
+        result
+    }
+}
+
+impl DnsQuestion {
+    pub fn build(&self) -> Vec<u8> {
+        let mut result: Vec<u8> = Vec::new();
+
+        result.append(&mut domain_list_to_bytes(&self.qname));
+        result.append(&mut (self.qtype.to_byte().0 as u16).to_be_bytes().to_vec());
+        result.append(&mut self.qclass.to_be_bytes().to_vec());
+
+        result
+    }
+}
+
+impl DnsAuthRecord {
+    pub fn default() -> Self {
+        DnsAuthRecord {
+            mname: Vec::new(),
+            rname: Vec::new(),
+            serial: 0,
+            refresh: 0,
+            retry: 0,
+            expire: 0,
+            minimum: 0
+        }
+    }
+
+    pub fn mname(mut self, mname: Vec<String>) -> Self {
+        self.mname = mname;
+        self
+    }
+
+    pub fn rname(mut self, rname: Vec<String>) -> Self {
+        self.rname = rname;
+        self
+    }
+
+    pub fn serial(mut self, serial: u32) -> Self {
+        self.serial = serial;
+        self
+    }
+
+    pub fn refresh(mut self, refresh: u32) -> Self {
+        self.refresh = refresh;
+        self
+    }
+
+    pub fn retry(mut self, retry: u32) -> Self {
+        self.retry = retry;
+        self
+    }
+
+    pub fn expire(mut self, expire: u32) -> Self {
+        self.expire = expire;
+        self
+    }
+
+    pub fn build(&self) -> Vec<u8> {
+        let mut result: Vec<u8> = Vec::new();
+
+        result.append(&mut domain_list_to_bytes(&self.mname));
+        result.append(&mut domain_list_to_bytes(&self.rname));
+        result.append(&mut self.serial.to_be_bytes().to_vec());
+        result.append(&mut self.refresh.to_be_bytes().to_vec());
+        result.append(&mut self.retry.to_be_bytes().to_vec());
+        result.append(&mut self.expire.to_be_bytes().to_vec());
+        result.append(&mut self.minimum.to_be_bytes().to_vec());
 
         result
     }
@@ -281,7 +397,9 @@ impl DnsRecordType {
             29 => Self::LOC(None),
             17 => Self::RP(None),
             52 => Self::TLSA(None),
-            _ => Self::NotImplemented
+            12 => Self::PTR(None),
+            6 => Self::SOA(None),
+            num => Self::NotImplemented(num)
         }
     }
 
@@ -294,7 +412,16 @@ impl DnsRecordType {
             Self::LOC(val) => (29, val),
             Self::RP(val) => (17, val),
             Self::TLSA(val) => (52, val),
-            Self::NotImplemented => (0, Some(Vec::new()))
+            Self::PTR(val) => (12, val),
+            Self::SOA(val) => {
+                let mut ret = None;
+                if let Some(auth) = val {
+                    ret = Some(auth.build());
+                }
+
+                (6, ret)
+            }
+            Self::NotImplemented(val) => (val, Some(Vec::new()))
         }
     }
 
@@ -320,12 +447,16 @@ impl DnsRecordType {
         };
 
         Some(
-            Self::A(
+            Self::AAAA(
                 Some(
                     ip.octets().to_vec()
                 )
             )
         )
+    }
+
+    pub fn new_SOA(auth_record: DnsAuthRecord) -> Option<Self> {
+        Some(Self::SOA(Some(auth_record)))
     }
 
     pub fn new_CNAME(cname: &str) -> Option<Self> {
