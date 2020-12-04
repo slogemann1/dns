@@ -1,18 +1,29 @@
 extern crate rusqlite;
+extern crate reqwest;
+extern crate serde;
+extern crate serde_json;
+
+#[macro_use]
+extern crate lazy_static;
 
 mod dns_request;
+mod handle_data;
+mod google_dns;
+mod database;
 
 use std::net::{ TcpListener, TcpStream, UdpSocket };
 use std::thread;
 use std::io::{ Read, Write };
 
-use dns_request::{ DnsResponse, DnsAnswer, DnsRecordType, DnsAuthRecord };
-
 fn main() {
+    //Startup (Errors can occur here)
     let server_tcp_v4 = TcpListener::bind("0.0.0.0:53").expect("Server failed to bind");
     let server_udp_v4 = UdpSocket::bind("0.0.0.0:53").expect("Server failed to bind");
     let server_tcp_v6 = TcpListener::bind("[::]:53").expect("Server failed to bind");
     let server_udp_v6 = UdpSocket::bind("[::]:53").expect("Server failed to bind");
+
+    database::init_db();
+    //No more expects in my code after this point
 
     thread::spawn(move || {
         println!("Tcp (Ipv4) Server Started");
@@ -67,7 +78,7 @@ fn handle_udp_server(server: UdpSocket) {
             Err(_) => continue
         };
         thread::spawn(move || {
-            let bytes = match handle_message(buffer[0..num_bytes].to_vec(), false) {
+            let bytes = match handle_data::handle_message(buffer[0..num_bytes].to_vec(), false) {
                 Some(val) => val,
                 None => return
             };
@@ -89,61 +100,13 @@ fn handle_tcp_client(mut client: TcpStream) {
         }
     };
 
-    let bytes = match handle_message(buffer[0..num_bytes].to_vec(), true) {
+    let bytes = match handle_data::handle_message(buffer[0..num_bytes].to_vec(), true) {
         Some(val) => val,
         None => return
     };
 
-    client.write(&bytes);
-}
-
-fn handle_message(buffer: Vec<u8>, tcp: bool) -> Option<Vec<u8>> {
-    let query = match dns_request::parse_query(&buffer, tcp) {
-        Some(val) => val,
-        None => {
-            return None;
-        }
+    match client.write(&bytes) {
+        Ok(_) => return,
+        Err(_) => return
     };
-
-    let mut response = DnsResponse::default()
-    .id(query.header.id)
-    .rd(query.header.rd);
-
-    for question in query.questions {
-        let mut answer = DnsAnswer::default()
-        .name(question.qname.clone())
-        .ttl(100);
-
-        if question.qtype == DnsRecordType::A(None) {
-            if !query.header.rd {
-                let record = DnsAuthRecord::default()
-                .mname(vec!(String::from("www"), String::from("shit"), String::from("com")))
-                .rname(vec!(String::from("www"), String::from("hello"), String::from("com")));
-                answer = answer.record(DnsRecordType::new_SOA(record));
-
-                response = response.add_auth_record(answer);
-            }
-            else {
-                answer = answer.record(DnsRecordType::new_A("13.107.21.200"));
-                response = response.add_answer(answer);
-            }
-        }
-        else if question.qtype == DnsRecordType::AAAA(None) {
-            if !query.header.rd {
-                answer = answer.record(DnsRecordType::new_AAAA("2a02:8108:96c0:19b8:138a:f55e:8212:330b"));
-            }
-            else {
-                answer = answer.record(DnsRecordType::new_AAAA("2a02:8108:96c0:19b8:138a:f55e:8212:330b"));
-                response = response.add_answer(answer);
-            }
-        }
-        else if let DnsRecordType::NotImplemented(val) = question.qtype {
-            println!("Unimplemented Record Request: {}", val);
-        }
-        else {
-            println!("Unimplemented Record Request: {:#?}", question.qtype);
-        }
-    }
-
-    Some(response.build(tcp))
 }

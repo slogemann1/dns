@@ -1,13 +1,18 @@
-//info from:
-//https://www2.cs.duke.edu/courses/fall16/compsci356/DNS/DNS-primer.pdf
-//https://www.hostdime.com/kb/hd/domain/dns-documentation
-//https://tools.ietf.org/html/rfc1035
+//! # Module for Dns Communication
+//! ## For more information see:
+//! <https://www2.cs.duke.edu/courses/fall16/compsci356/DNS/DNS-primer.pdf> (A brief overview from a client's perspective)\
+//! <https://tools.ietf.org/html/rfc1035> (The complete dns specifications)\
+//! <https://tools.ietf.org/html/rfc1464> (The specifications for the TXT record format)
 
 use std::convert::TryInto; 
 
 mod structs;
 pub use structs::*;
 
+/// Function to parse through a dns query
+/// This function takes as input a buffer consisting soley of the bytes required to read the query,
+/// and a boolean to signify whether the request was sent by tcp or udp. It returns a DnsQuery on sucess
+/// or None on failure
 pub fn parse_query(buffer: &Vec<u8>, tcp: bool) -> Option<DnsQuery> {
     let mut buffer = buffer;
     let buffer_temp;

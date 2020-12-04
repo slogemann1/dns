@@ -1,91 +1,159 @@
 use std::clone::Clone;
 use std::net::{ Ipv4Addr, Ipv6Addr };
+use serde::{ Deserialize, Serialize };
 
+/// # Struct representing a dns query
 #[derive(PartialEq, Debug)]
 pub struct DnsQuery {
+    ///The header of the query
     pub header: DnsHeader,
+    ///The questions the sender wants answered
     pub questions: Vec<DnsQuestion>
 }
 
+/// # Struct representing a dns response
 #[derive(Debug)]
 pub struct DnsResponse {
+    ///The header of the response
     pub header: DnsHeader,
+    ///The questions the sender asked
     pub questions: Vec<DnsQuestion>,
+    ///The answers to the asked questions
     pub answers: Vec<DnsAnswer>,
+    ///Authority records for non-recursive queries
     pub authority_records: Vec<DnsAnswer>,
+    ///Additional records
     pub additional_records: Vec<DnsAnswer>
 }
 
+/// # Struct representing the header of a dns message
 #[derive(PartialEq, Debug)]
 pub struct DnsHeader {
-    pub id: u16, //Identifier for the Request
-    pub qr: bool, //Query (0) / Response (1)
-    pub opcode: u8, //4 bit opcode
-    pub aa: bool, //Authoritative Answer
-    pub tc: bool, //TrunCation
-    pub rd: bool, //Recursion Desired
-    pub ra: bool, //Recursion Avalible
-    pub z: u8, //3 Reserved Bits
-    pub rcode: DnsResponseCode, //Response Code
-    pub qd_count: u16, //Question Count
-    pub an_count: u16, //Answer Count
-    pub ns_count: u16, //Name Server Resource Records Count
-    pub ar_count: u16 //Additional Resource Records Count
+    ///Identifier for the request
+    pub id: u16,
+    ///Query/Response bitflag (1: query, 0: response)
+    pub qr: bool,
+    ///4-bit opcode
+    pub opcode: u8,
+    ///Authoritative Answer bitflag
+    pub aa: bool,
+    ///TrunCation bitflag
+    pub tc: bool,
+    ///Recursion Desired bitflag
+    pub rd: bool,
+    ///Recursion Avalible bitflag
+    pub ra: bool,
+    ///3 Reserved bits which should always be 0
+    pub z: u8,
+    ///Response Code
+    pub rcode: DnsResponseCode,
+    ///Question Count
+    pub qd_count: u16,
+    ///Answer Count
+    pub an_count: u16,
+    ///Name Server resource records count
+    pub ns_count: u16,
+    ///Additional Resource records count
+    pub ar_count: u16
 }
 
+/// # Struct representing a question in a dns query or response
 #[derive(PartialEq, Clone, Debug)]
 pub struct DnsQuestion {
-    pub qname: Vec<String>, //List of domains to be determined
-    pub qtype: DnsRecordType, //Query Type
-    pub qclass: u16 //Query Class
+    ///List of domains to be determined
+    pub qname: Vec<String>,
+    ///Query Type
+    pub qtype: DnsRecordType,
+    ///Query Class
+    pub qclass: u16
 }
 
+/// # Struct representing an answer in a dns response
 #[derive(Clone, Debug)]
 pub struct DnsAnswer {
-    pub name: Vec<String>, //Like DnsRequest.qname
-    pub r#type: DnsRecordType, //Type of rdata
-    pub class: u16, //Class of rdata
-    pub ttl: u32, //Number of seconds results can be cached
-    pub rd_length: u16, //Length of rdata
-    pub rdata: Vec<u8> //Data of response (currently ip format)
+    ///The list of domains asked for by the question
+    pub name: Vec<String>,
+    ///Type record type of this answer
+    pub r#type: DnsRecordType,
+    ///Class of the this answer
+    pub class: u16,
+    ///Time to Live (number of seconds results can be cached)
+    pub ttl: u32,
+    ///Length in bytes of the rdata field
+    pub rd_length: u16,
+    ///Record data of the response
+    pub rdata: Vec<u8>
 }
 
-#[derive(PartialEq, Debug, Clone)]
+/// # Struct representing an authority record of a name server
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct DnsAuthRecord {
+    ///Domain name of the primary name server for a zone
     pub mname: Vec<String>,
+    ///E-mail domain name to contact those responsible for the name server
     pub rname: Vec<String>,
+    ///Version number of the zone
     pub serial: u32,
+    ///The time in seconds before the zone should be refreshed
     pub refresh: u32,
+    ///The time in seconds before a failed attempt at a refresh should be retried
     pub retry: u32,
+    ///The time in seconds until the zone is not guaranteed to be authoritative
     pub expire: u32,
+    ///The minimum time to live any resource record from this server should have
     pub minimum: u32
 }
 
+/// # A enum which represents the possible response codes for a dns message
 #[derive(PartialEq, Debug)]
 pub enum DnsResponseCode {
+    ///The default response code
     NoError,
+    ///The response code for incorrectly formatted messages
     FormatError,
+    ///The response code for an internal server issue which leads to the record not being accessible
     ServerFailure,
-    NameError,
+    ///The response code indicating a record for a domain cannot be found
+    NxDomain,
+    ///The response code for queries which cannot be handled by the server due to lack of implementation
     NotImplemented,
+    ///The response code for queries the server does not wish to respond to
     Refused
 }
 
+/// # An enum which represents the most common possible record types that are queried and returned
+///Record types that come without associated data (i.e. those from parsed questions) will by default have the 
+///value of None 
 #[derive(PartialEq, Debug, Clone)]
 pub enum DnsRecordType {
+    ///An A record (ipv4 address) and its associated rdata field
     A(Option<Vec<u8>>), //1
+    ///An AAAA record (ipv6 address) and its associated rdata field
     AAAA(Option<Vec<u8>>), //28
+    ///A CNAME record (canonical name: the domain name an alias refers to) and its associated rdata field
     CNAME(Option<Vec<u8>>), //5
+    ///A MX record (mail exchange) and its associated rdata field
     MX(Option<Vec<u8>>), //15
+    ///A LOC record (location) and its associated rdata field
     LOC(Option<Vec<u8>>), //29
+    ///A RP record (responsible person) and its associated rdata field
     RP(Option<Vec<u8>>), //17
+    ///A TLSA record (TLS certificate record) and its associated rdata field
     TLSA(Option<Vec<u8>>), //52
+    ///A PTR record (pointer to a cname record) and its associated rdata field
     PTR(Option<Vec<u8>>), //12
+    ///A TXT record and its associated rdata field
+    TXT(Option<Vec<u8>>), //16
+    ///A SOA record (authority record: provides information about the name server of a domain)
+    ///with a [DnsAuthRecord](DnsAuthRecord) struct
     SOA(Option<DnsAuthRecord>), //6
-    NotImplemented(u8),
+    ///A stand-in for unimplemented record types with its associated record code
+    NotImplemented(u8)
 }
 
 impl DnsResponse {
+    ///Returns the default configuration of a DnsResponse to be added upon.
+    ///The header fields id, aa, tc, rd, ra, and rcode will likely need to be set later
     pub fn default() -> Self {
         let header = DnsHeader {
             id: 0, //Id should be set later
@@ -93,7 +161,7 @@ impl DnsResponse {
             opcode: 0, //Standard Query Response
             aa: false, //All results are from cache
             tc: false, //Not truncated
-            rd: false, //Field for requester
+            rd: true, //Most queries desire recursion 
             ra: true, //This server should simulate recursion
             z: 0, //Must be 0
             rcode: DnsResponseCode::NoError,
@@ -112,54 +180,60 @@ impl DnsResponse {
         }
     }
 
+    ///Sets the id of the header field of the Response
     pub fn id(mut self, id: u16) -> Self {
         self.header.id = id;
         self
     }
 
+    ///Sets the rd bitflag of the header field of the Response
     pub fn rd(mut self, rd: bool) -> Self {
         self.header.rd = rd;
         self
     }
 
+    ///Sets the opcode of the header field of the Response
     pub fn opcode(mut self, opcode: u8) -> Self {
         self.header.opcode = opcode;
         self
     }
 
+    ///Sets the response code of the header field of the Response
     pub fn rcode(mut self, rcode: DnsResponseCode) -> Self {
         self.header.rcode = rcode;
         self
     }
 
-    pub fn ns_count(mut self, ns_count: u16) -> Self {
-        self.header.ns_count = ns_count;
-        self
-    }
-
+    ///Sets the additions resource records count of the header field of the Response (will later be removed)
     pub fn ar_count(mut self, ar_count: u16) -> Self {
         self.header.ar_count = ar_count;
         self
     }
 
+    ///Adds an answer to the response
     pub fn add_answer(mut self, answer: DnsAnswer) -> Self {
         self.answers.push(answer);
         self.header.an_count += 1;
         self
     }
 
+    ///Adds a question to the response
     pub fn add_question(mut self, question: DnsQuestion) -> Self {
         self.questions.push(question);
         self.header.qd_count += 1;
         self
     }
 
+    ///Adds an authority record to the response
     pub fn add_auth_record(mut self, auth_record: DnsAnswer) -> Self {
         self.authority_records.push(auth_record);
         self.header.ns_count += 1;
         self
     }
 
+    ///Converts the response to the binary format so it can be sent over a connection.
+    ///The tcp parameter indicates whether the request will be sent over tcp or udp
+    ///to account for the length bytes in a tcp response
     pub fn build(&self, tcp: bool) -> Vec<u8> {
         let mut result: Vec<u8> = Vec::new();
 
@@ -190,7 +264,7 @@ impl DnsResponse {
 }
 
 impl DnsHeader {
-    pub fn build(&self) -> Vec<u8> {
+    fn build(&self) -> Vec<u8> {
         let mut result: Vec<u8> = Vec::new();
 
         result.append(&mut self.id.to_be_bytes().to_vec()); //Add id first
@@ -217,7 +291,7 @@ impl DnsHeader {
         result
     }
 
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         DnsHeader {
             id: 0,
             qr: false,
@@ -237,6 +311,8 @@ impl DnsHeader {
 }
 
 impl DnsAnswer {
+    ///Returns the default configuration of a DnsAnswer to be added upon.
+    ///The fields name, type, and ttl will likely need to be set later
     pub fn default() -> Self {
         Self {
             name: Vec::new(),
@@ -248,21 +324,25 @@ impl DnsAnswer {
         }
     }
 
+    ///Sets the name of the answer as a list of domains
     pub fn name(mut self, name: Vec<String>) -> Self {
         self.name = name;
         self
     }
 
+    ///Sets the class of the answer
     pub fn class(mut self, class: u16) -> Self {
         self.class = class;
         self
     }
 
+    ///Sets the time to live of the answer
     pub fn ttl(mut self, ttl: u32) -> Self {
         self.ttl = ttl;
         self
     }
 
+    ///Adds a resource record to the answer
     pub fn record(mut self, r_type: Option<DnsRecordType>) -> Self {
         let r_type = match r_type {
             Some(val) => val,
@@ -279,7 +359,7 @@ impl DnsAnswer {
         self
     }
 
-    pub fn build(&self) -> Vec<u8> {
+    fn build(&self) -> Vec<u8> {
         let mut result: Vec<u8> = Vec::new();
 
         result.append(&mut domain_list_to_bytes(&self.name));
@@ -294,7 +374,7 @@ impl DnsAnswer {
 }
 
 impl DnsQuestion {
-    pub fn build(&self) -> Vec<u8> {
+    fn build(&self) -> Vec<u8> {
         let mut result: Vec<u8> = Vec::new();
 
         result.append(&mut domain_list_to_bytes(&self.qname));
@@ -306,7 +386,9 @@ impl DnsQuestion {
 }
 
 impl DnsAuthRecord {
-    pub fn default() -> Self {
+    ///Returns a new instance of a DnsAuthRecord to be added upon.
+    ///The fields will need to be set later
+    pub fn new() -> Self {
         DnsAuthRecord {
             mname: Vec::new(),
             rname: Vec::new(),
@@ -318,37 +400,49 @@ impl DnsAuthRecord {
         }
     }
 
+    ///Sets the mname field of the authority record as a list of domains
     pub fn mname(mut self, mname: Vec<String>) -> Self {
         self.mname = mname;
         self
     }
 
+    ///Sets the rname field of the authority record as a list of domains
     pub fn rname(mut self, rname: Vec<String>) -> Self {
         self.rname = rname;
         self
     }
 
+    ///Sets the serial field of the authority record
     pub fn serial(mut self, serial: u32) -> Self {
         self.serial = serial;
         self
     }
 
+    ///Sets the refresh field of the authority record
     pub fn refresh(mut self, refresh: u32) -> Self {
         self.refresh = refresh;
         self
     }
 
+    ///Sets the retry field of the authority record
     pub fn retry(mut self, retry: u32) -> Self {
         self.retry = retry;
         self
     }
 
+    ///Sets the expire field of the authority record
     pub fn expire(mut self, expire: u32) -> Self {
         self.expire = expire;
         self
     }
 
-    pub fn build(&self) -> Vec<u8> {
+    ///Sets the minimum field of the authority record
+    pub fn minimum(mut self, minimum: u32) -> Self {
+        self.minimum = minimum;
+        self
+    }
+
+    fn build(&self) -> Vec<u8> {
         let mut result: Vec<u8> = Vec::new();
 
         result.append(&mut domain_list_to_bytes(&self.mname));
@@ -369,26 +463,28 @@ impl DnsResponseCode {
             Self::NoError => 0,
             Self::FormatError => 1,
             Self::ServerFailure => 2,
-            Self::NameError => 3,
+            Self::NxDomain => 3,
             Self::NotImplemented => 4,
             Self::Refused => 5
         }
     }
 
-    pub fn from_byte(byte: u8) -> Self {
+    pub(super) fn from_byte(byte: u8) -> Self {
         match byte {
             0 => Self::NoError,
             1 => Self::FormatError,
             2 => Self::ServerFailure,
-            3 => Self::NameError,
+            3 => Self::NxDomain,
             4 => Self::NotImplemented,
             _ => Self::Refused,
         }
     }
 }
 
+///All new functions will return None upon failure.
+///Those that cannot fail have the Option type to maintain consistency
 impl DnsRecordType {
-    pub fn from_byte(byte: u8) -> Self {
+    pub(super) fn from_byte(byte: u8) -> Self {
         match byte {
             1 => Self::A(None),
             28 => Self::AAAA(None),
@@ -398,12 +494,13 @@ impl DnsRecordType {
             17 => Self::RP(None),
             52 => Self::TLSA(None),
             12 => Self::PTR(None),
+            16 => Self::TXT(None),
             6 => Self::SOA(None),
             num => Self::NotImplemented(num)
         }
     }
 
-    fn to_byte(&self) -> (u8, Option<Vec<u8>>) {
+    pub(crate) fn to_byte(&self) -> (u8, Option<Vec<u8>>) {
         match self.clone() {
             Self::A(val) => (1, val),
             Self::AAAA(val) => (28, val),
@@ -413,6 +510,7 @@ impl DnsRecordType {
             Self::RP(val) => (17, val),
             Self::TLSA(val) => (52, val),
             Self::PTR(val) => (12, val),
+            Self::TXT(val) => (16, val),
             Self::SOA(val) => {
                 let mut ret = None;
                 if let Some(auth) = val {
@@ -425,7 +523,8 @@ impl DnsRecordType {
         }
     }
 
-    pub fn new_A(ipv4: &str) -> Option<Self> {
+    ///Creates a new A record from a string containing an ipv4 address
+    pub fn new_a(ipv4: &str) -> Option<Self> {
         let ip: Ipv4Addr = match ipv4.parse() {
             Ok(val) => val,
             Err(_) => return None
@@ -440,7 +539,8 @@ impl DnsRecordType {
         )
     }
 
-    pub fn new_AAAA(ipv6: &str) -> Option<Self> {
+    ///Creates a new AAAA record from a string containing an ipv6 address
+    pub fn new_aaaa(ipv6: &str) -> Option<Self> {
         let ip: Ipv6Addr = match ipv6.parse() {
             Ok(val) => val,
             Err(_) => return None
@@ -455,27 +555,49 @@ impl DnsRecordType {
         )
     }
 
-    pub fn new_SOA(auth_record: DnsAuthRecord) -> Option<Self> {
+    ///Creates a new SOA record from a [DnsAuthRecord](DnsAuthRecord)
+    pub fn new_soa(auth_record: DnsAuthRecord) -> Option<Self> {
         Some(Self::SOA(Some(auth_record)))
     }
 
-    pub fn new_CNAME(cname: &str) -> Option<Self> {
+    ///Creates a new TXT record from a string
+    pub fn new_txt(text: &str) -> Option<Self> {
+        Some(
+            Self::TXT(
+                Some(
+                    text.as_bytes().to_vec()
+                )
+            )
+        )
+    }
+
+    ///Creates a new CNAME record (unimplemented)
+    pub fn new_cname(cname: &str) -> Option<Self> {
         None
     }
 
-    pub fn new_MX() -> Option<Self> {
+    ///Creates a new MX record (unimplemented)
+    pub fn new_mx(_val: &str) -> Option<Self> {
         None
     }
 
-    pub fn new_LOC() -> Option<Self> {
+    ///Creates a new LOC record (unimplemented)
+    pub fn new_loc(_val: &str) -> Option<Self> {
         None
     }
 
-    pub fn new_RP() -> Option<Self> {
+    ///Creates a new RP record (unimplemented)
+    pub fn new_rp(_val: &str) -> Option<Self> {
         None
     }
 
-    pub fn new_TLSA() -> Option<Self> {
+    ///Creates a new TLSA record (unimplemented)
+    pub fn new_tlsa(_val: &str) -> Option<Self> {
+        None
+    }
+
+    ///Creates a new PTR record (unimplemented)
+    pub fn new_ptr(_val: &str) -> Option<Self> {
         None
     }
 }
@@ -545,20 +667,20 @@ mod tests {
         let ans1 = DnsAnswer::default()
         .name(vec!(String::from("www"), String::from("example"), String::from("com")))
         .ttl(200)
-        .record(DnsRecordType::new_A("192.168.0.1"));
+        .record(DnsRecordType::new_a("192.168.0.1"));
 
         let resp = DnsResponse::default()
         .id(32)
         .opcode(3)
         .rcode(DnsResponseCode::Refused)
-        .answer(&ans1);
+        .add_answer(ans1);
 
         let expected: Vec<u8> = vec!(
             //Header:
             0, 43, //Length of message (43 bytes)
             0b0000_0000, //First byte of id
             0b0010_0000, //Second byte of id (32)
-            0b1_0011_0_0_0, //qr (1), opcode (3), aa (0), tc (0), rd (0)
+            0b1_0011_0_0_1, //qr (1), opcode (3), aa (0), tc (0), rd (1)
             0b1_000_0101, //ra (1), z (0), rcode (5)
             0, 0, //qd_count
             0, 1, //an_count (1)
